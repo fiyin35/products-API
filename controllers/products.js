@@ -1,15 +1,15 @@
 const Product = require('../models/product')
 
 const getAllProductsStatic = async (req, res) => {
-    const products = await Product.find({})
-    .select('name price')
-    .limit(10)
-    .skip()
+    const products = await Product.find({ price: { $gt: 30 } })
+        .sort('price')
+        .select('name price')
+
     res.status(200).json({products, nbHits: products.length})
 }
 
 const getAllProducts = async (req, res) => {
-    const {feature, company, name, sort, fields} = req.query
+    const {feature, company, name, sort, fields, numericFilters } = req.query
     const queryObject = {}
     
     if(feature) {
@@ -21,12 +21,35 @@ const getAllProducts = async (req, res) => {
     if(name) {
         queryObject.name = {$regex: name, $options: 'i'}
     }
-    console.log(queryObject)
+
+    if (numericFilters) {
+        const operatorMap = {
+          '>': '$gt',
+          '>=': '$gte',
+          '=': '$eq',
+          '<': '$lt',
+          '<=': '$lte',
+        }
+        const regEx = /\b(<|>|>=|=|<|<=)\b/g
+        let filters = numericFilters.replace(
+          regEx,
+          (match) => `-${operatorMap[match]}-`
+        )
+        const options = ['price', 'rating']
+        filters = filters.split(',').forEach((item) => {
+          const [field, operator, value] = item.split('-')
+          if (options.includes(field)) {
+            queryObject[field] = { [operator]: Number(value) }
+          }
+        })
+      }
+
+    //console.log(queryObject)
     let result = await Product.find(queryObject)
 
     //sort
     if(sort) {
-        let sortList = sort.split(',').join(' ')
+        const sortList = sort.split(',').join(' ')
         result = result.sort(sortList)
     } 
 
@@ -37,7 +60,13 @@ const getAllProducts = async (req, res) => {
     }
     const page = Number(req.query.page) || 1
     const limit = Number(req.query.limit) || 10
-    const skip = Number(page - 1) * limit
+    //const skip = (page - 1) * limit
+
+    //result = result.skip(skip).limit(limit)
+    //pagination
+    //23 total products
+    // 4 pages 7 7 7 2 product per page
+
     const products = await result
     res.status(200).json({products, nbHits: products.length})
 }
